@@ -82,7 +82,9 @@ jobs:
           docker ps -aq --filter 'name=^/buzz-' | sort > .ota-ci/v11-21/before-containers.txt
           docker network ls -q --filter 'name=^buzz-net$' | sort > .ota-ci/v11-21/before-networks.txt
           docker volume ls -q --filter 'name=^buzz-' | sort > .ota-ci/v11-21/before-volumes.txt
-          git status --porcelain --untracked-files=all > .ota-ci/v11-21/before-git.txt
+          git diff --exit-code
+          git status --porcelain --untracked-files=all -- . ':(exclude).ota-ci' \
+            > .ota-ci/v11-21/before-git.txt
           test ! -e target
           test ! -e .env
           test ! -e node_modules
@@ -148,7 +150,9 @@ jobs:
           docker ps -aq --filter 'name=^/buzz-' | sort > .ota-ci/v11-21/after-containers.txt
           docker network ls -q --filter 'name=^buzz-net$' | sort > .ota-ci/v11-21/after-networks.txt
           docker volume ls -q --filter 'name=^buzz-' | sort > .ota-ci/v11-21/after-volumes.txt
-          git status --porcelain --untracked-files=all > .ota-ci/v11-21/after-git.txt
+          git diff --exit-code
+          git status --porcelain --untracked-files=all -- . ':(exclude).ota-ci' \
+            > .ota-ci/v11-21/after-git.txt
 
           cmp .ota-ci/v11-21/before-containers.txt .ota-ci/v11-21/after-containers.txt
           cmp .ota-ci/v11-21/before-networks.txt .ota-ci/v11-21/after-networks.txt
