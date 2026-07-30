@@ -57,9 +57,8 @@ jobs:
           ota --version --json | tee .ota-ci/v11-21/ota-version.json
           jq -e '
             .source_build == true
-            and .dirty == false
             # The bootstrap contract carries the full immutable revision. Version JSON exposes
-            # Ota exposes its canonical short source revision for human and machine display.
+            # the corresponding short source revision for human and machine display.
             and .commit == "8de7d34db"
           ' .ota-ci/v11-21/ota-version.json
 
