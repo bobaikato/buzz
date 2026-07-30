@@ -63,8 +63,10 @@ matrix separately validates the ordinary read-only readiness archive and records
 archival as an Ota audit-evidence gap. It does not call that archive evidence of the refusal.
 
 `ota doctor --workflow integration --mode native` is intentionally a non-provider diagnosis for
-this pass. Default container diagnosis may probe its declared image, which is a separate provider
-operation and cannot demonstrate refusal-before-provider-mutation.
+this pass. A clean hosted runner is expected to report the declared `just` tool as missing; the
+matrix does not install it because doing so would be host mutation outside the refusal proof.
+Default container diagnosis may probe its declared image, which is a separate provider operation
+and cannot demonstrate refusal-before-provider-mutation.
 
 ## Uncovered Material Behavior
 

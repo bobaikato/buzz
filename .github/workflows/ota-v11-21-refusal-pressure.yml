@@ -63,8 +63,14 @@ jobs:
           ' .ota-ci/v11-21/ota-version.json
 
           ota validate --plain | tee .ota-ci/v11-21/validate.txt
-          # Native diagnosis avoids a separate container-image probe. It does not claim service readiness.
-          ota doctor --workflow integration --mode native --plain | tee .ota-ci/v11-21/doctor.txt
+          # Native diagnosis avoids a separate container-image probe. A clean hosted runner is
+          # expected to report the declared `just` tool as missing; this pass must not install it.
+          set +e
+          ota doctor --workflow integration --mode native --plain > .ota-ci/v11-21/doctor.txt 2>&1
+          doctor_exit=$?
+          set -e
+          test "$doctor_exit" -eq 1
+          grep -q 'Missing tool: just' .ota-ci/v11-21/doctor.txt
           ota tasks --use --plain | tee .ota-ci/v11-21/tasks.txt
           ota tasks --safe --use --plain | tee .ota-ci/v11-21/tasks-safe.txt
 
