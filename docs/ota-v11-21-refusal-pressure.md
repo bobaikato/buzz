@@ -59,8 +59,9 @@ resource, `.env`, dependency tree, compiler output, or repository write is a pre
 `ota run` provides the human refusal; `ota run --dry-run --json` provides its machine-readable
 admission record. `ota up --receipt --json` provides an inline blocked receipt with
 `execution_attempted: false`. Current Ota does not archive a pre-boundary sandbox refusal, so the
-matrix separately validates the ordinary read-only readiness archive and records durable refusal
-archival as an Ota audit-evidence gap. It does not call that archive evidence of the refusal.
+matrix separately validates the ordinary native readiness archive. On a clean hosted runner that
+archive is expected to retain the same missing-`just` readiness failure; it does not call that
+archive evidence of the refusal. Durable refusal archival remains an Ota audit-evidence gap.
 
 `ota doctor --workflow integration --mode native` is intentionally a non-provider diagnosis for
 this pass. A clean hosted runner is expected to report the declared `just` tool as missing; the

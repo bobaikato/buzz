@@ -172,10 +172,15 @@ jobs:
         run: |
           set -euo pipefail
           # Current Core carries sandbox refusal inline in `ota up --json`, but does not archive it.
+          set +e
           ota receipt --workflow integration --mode native --archive --json \
             > .ota-ci/v11-21/readiness-archive.json
+          readiness_receipt_exit=$?
+          set -e
+          # The same clean-host `just` blocker is expected in this ordinary native receipt.
+          test "$readiness_receipt_exit" -eq 1
           ota receipt --history --json > .ota-ci/v11-21/receipt-history.json
-          jq -e '.archive_path != null and .receipt.status == "success"' \
+          jq -e '.archive_path != null and .receipt.status == "failed"' \
             .ota-ci/v11-21/readiness-archive.json
           jq -e '.summary.archive_count >= 1 and .summary.invalid_archive_count == 0' \
             .ota-ci/v11-21/receipt-history.json
