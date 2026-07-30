@@ -3,6 +3,12 @@
 /dist/
 /admin-web/dist/
 
+# Ota local execution state and archived evidence
+.ota/state/
+.ota/contracts/
+.ota/receipts/
+.ota/proof/
+
 # lefthook-generated hook scripts (machine-specific)
 .hooks/
 

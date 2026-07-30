@@ -1,0 +1,183 @@
+#
+#                 █████
+#                ░░███
+#        ██████  ███████    ██████
+#       ███░░███░░░███░    ░░░░░███
+#      ░███ ░███  ░███      ███████
+#      ░███ ░███  ░███ ███ ███░░███
+#      ░░██████   ░░█████ ░░████████
+#       ░░░░░░     ░░░░░   ░░░░░░░░
+#
+#    Copyright (C) 2026 — 2026, Ota. All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+#
+name: Ota V11.21 unsupported-capability pressure
+
+on:
+  push:
+    branches:
+      - bobai/buzz-ota-v11-21-refusal-pressure
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oci-local-refusal:
+    name: Stock OCI refusal before Buzz mutation (linux/amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install exact Ota Core from contract truth
+        uses: ota-run/setup@493cba84bf7f7c11c9e8e996d832d93a89c62184
+        with:
+          source: contract
+          contract-path: ota.yaml
+
+      - name: Validate refusal contract and discover the bounded lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ota-ci/v11-21
+
+          ota --version --json | tee .ota-ci/v11-21/ota-version.json
+          jq -e '
+            .source_build == true
+            and .dirty == false
+            # The bootstrap contract carries the full immutable revision. Version JSON exposes
+            # Ota exposes its canonical short source revision for human and machine display.
+            and .commit == "8de7d34db"
+          ' .ota-ci/v11-21/ota-version.json
+
+          ota validate --plain | tee .ota-ci/v11-21/validate.txt
+          # Native diagnosis avoids a separate container-image probe. It does not claim service readiness.
+          ota doctor --workflow integration --mode native --plain | tee .ota-ci/v11-21/doctor.txt
+          ota tasks --use --plain | tee .ota-ci/v11-21/tasks.txt
+          ota tasks --safe --use --plain | tee .ota-ci/v11-21/tasks-safe.txt
+
+      - name: Prove sandbox refusal before any Buzz mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker ps -aq --filter 'name=^/buzz-' | sort > .ota-ci/v11-21/before-containers.txt
+          docker network ls -q --filter 'name=^buzz-net$' | sort > .ota-ci/v11-21/before-networks.txt
+          docker volume ls -q --filter 'name=^buzz-' | sort > .ota-ci/v11-21/before-volumes.txt
+          git status --porcelain --untracked-files=all > .ota-ci/v11-21/before-git.txt
+          test ! -e target
+          test ! -e .env
+          test ! -e node_modules
+          test ! -e desktop/node_modules
+
+          docker events --since "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --format '{{json .}}' \
+            > .ota-ci/v11-21/docker-events.ndjson &
+          events_pid=$!
+          trap 'kill "$events_pid" 2>/dev/null || true; wait "$events_pid" 2>/dev/null || true' EXIT
+
+          set +e
+          ota run test:integration --agent --sandbox-target oci_local --dry-run --json \
+            > .ota-ci/v11-21/run-dry.json 2>&1
+          run_dry_exit=$?
+          ota up --workflow integration --agent --sandbox-target oci_local --dry-run --json \
+            > .ota-ci/v11-21/up-dry.json
+          up_dry_exit=$?
+          ota run test:integration --agent --sandbox-target oci_local --receipt --plain \
+            > .ota-ci/v11-21/run-human.txt 2>&1
+          run_exit=$?
+          ota up --workflow integration --agent --sandbox-target oci_local --receipt --json \
+            > .ota-ci/v11-21/up-refusal.json
+          up_exit=$?
+          set -e
+
+          test "$run_dry_exit" -eq 1
+          test "$up_dry_exit" -eq 1
+          test "$run_exit" -eq 1
+          test "$up_exit" -eq 1
+
+          jq -e '
+            .ok == false
+            and .execution_started == false
+            and .sandbox_admission.kind == "sandbox_policy_refused"
+            and ([.sandbox_admission.refusals[].control] | index("execution.pre_boundary_actions"))
+            and ([.sandbox_admission.refusals[] | select(.control == "execution.pre_boundary_actions") | .required]
+              | any(contains("required_services")))
+            and ([.sandbox_admission.refusals[] | select(.control == "execution.pre_boundary_actions") | .required]
+              | any(contains("task_requirements")))
+          ' .ota-ci/v11-21/run-dry.json
+          jq -e '
+            .ok == false
+            and .phase == "preview"
+            and .governance.post_execution.execution_attempted == false
+            and .receipt.status == "blocked"
+            and ([.findings[].code] | index("OTA_SANDBOX_POLICY_REFUSED"))
+          ' .ota-ci/v11-21/up-dry.json
+          jq -e '
+            .ok == false
+            and .phase == "preconditions"
+            and .governance.post_execution.execution_attempted == false
+            and .receipt.status == "blocked"
+            and ([.findings[].code] | index("OTA_SANDBOX_POLICY_REFUSED"))
+          ' .ota-ci/v11-21/up-refusal.json
+          grep -q 'Status:      blocked' .ota-ci/v11-21/run-human.txt
+          grep -q 'execution.pre_boundary_actions' .ota-ci/v11-21/run-dry.json
+
+          # Stop and flush the collector before using its log as mutation evidence.
+          kill "$events_pid" 2>/dev/null || true
+          wait "$events_pid" 2>/dev/null || true
+          trap - EXIT
+
+          docker ps -aq --filter 'name=^/buzz-' | sort > .ota-ci/v11-21/after-containers.txt
+          docker network ls -q --filter 'name=^buzz-net$' | sort > .ota-ci/v11-21/after-networks.txt
+          docker volume ls -q --filter 'name=^buzz-' | sort > .ota-ci/v11-21/after-volumes.txt
+          git status --porcelain --untracked-files=all > .ota-ci/v11-21/after-git.txt
+
+          cmp .ota-ci/v11-21/before-containers.txt .ota-ci/v11-21/after-containers.txt
+          cmp .ota-ci/v11-21/before-networks.txt .ota-ci/v11-21/after-networks.txt
+          cmp .ota-ci/v11-21/before-volumes.txt .ota-ci/v11-21/after-volumes.txt
+          cmp .ota-ci/v11-21/before-git.txt .ota-ci/v11-21/after-git.txt
+          test ! -e target
+          test ! -e .env
+          test ! -e node_modules
+          test ! -e desktop/node_modules
+          if grep -Eq 'buzz-|com\\.buzz\\.' .ota-ci/v11-21/docker-events.ndjson; then
+            echo "Buzz-labelled Docker event occurred despite sandbox refusal" >&2
+            exit 1
+          fi
+
+      - name: Validate the ordinary receipt archive boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Current Core carries sandbox refusal inline in `ota up --json`, but does not archive it.
+          ota receipt --workflow integration --mode native --archive --json \
+            > .ota-ci/v11-21/readiness-archive.json
+          ota receipt --history --json > .ota-ci/v11-21/receipt-history.json
+          jq -e '.archive_path != null and .receipt.status == "success"' \
+            .ota-ci/v11-21/readiness-archive.json
+          jq -e '.summary.archive_count >= 1 and .summary.invalid_archive_count == 0' \
+            .ota-ci/v11-21/receipt-history.json
+
+      - name: Upload bounded pressure evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ota-v11-21-buzz-refusal-pressure
+          path: |
+            .ota-ci/v11-21
+            .ota/receipts
+            .ota/contracts
+          if-no-files-found: error

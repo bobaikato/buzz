@@ -224,6 +224,7 @@ A Rust workspace of focused crates. Single source of truth: the relay. See [ARCH
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design, kind ranges, subsystem boundaries
 - **[TESTING.md](TESTING.md)** — multi-agent E2E test suite
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** · **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** · **[SECURITY.md](SECURITY.md)** · **[GOVERNANCE.md](GOVERNANCE.md)**
+- **[Ota V11.21 refusal pressure](docs/ota-v11-21-refusal-pressure.md)** — bounded proof that stock OCI sandboxing refuses the Compose-backed integration closure before mutation
 
 <details>
 <summary><strong>Configuration</strong> (env vars, defaults work for local dev)</summary>
