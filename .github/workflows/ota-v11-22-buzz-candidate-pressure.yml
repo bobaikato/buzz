@@ -67,7 +67,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: block/buzz
-          ref: 2d280376a
+          ref: 2d280376ad36134cec1f23bead6d866d30bed147
           path: buzz
           fetch-depth: 1
           persist-credentials: false
