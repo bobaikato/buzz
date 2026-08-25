@@ -80,7 +80,7 @@ jobs:
           mkdir -p .ota/candidates .ota/pressure
           ota --version --json > .ota/pressure/ota-version.json
           git rev-parse HEAD > .ota/pressure/repository-revision.txt
-          test "$(cat .ota/pressure/repository-revision.txt)" = "2d280376a"
+          test "$(cat .ota/pressure/repository-revision.txt)" = "2d280376ad36134cec1f23bead6d866d30bed147"
           test ! -e ota.yaml
 
           ota detect --candidate-out .ota/candidates/buzz.json --json > .ota/pressure/detect.json
@@ -114,7 +114,7 @@ jobs:
           }
           fs.writeFileSync('.ota/pressure/summary.json', JSON.stringify({
             core_revision: 'cf9d734d749cfb1259cc8249f9cc88e36bb1e00d',
-            upstream_revision: '2d280376a',
+            upstream_revision: '2d280376ad36134cec1f23bead6d866d30bed147',
             candidate_identity: candidate.identity,
             resulting_contract_identity: candidate.application_projection.resulting_contract_identity,
             application_written: applied.written,
