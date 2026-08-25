@@ -1,0 +1,135 @@
+# <!--
+#                 █████
+#                ░░███
+#        ██████  ███████    ██████
+#       ███░░███░░░███░    ░░░░░███
+#      ░███ ░███  ░███      ███████
+#      ░███ ░███  ░███ ███ ███░░███
+#      ░░██████   ░░█████ ░░████████
+#       ░░░░░░     ░░░░░   ░░░░░░░░
+#
+#    Copyright (C) 2026 — 2026, Ota. All Rights Reserved.
+#
+#    DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+#
+#    Licensed under the Apache License, Version 2.0. See LICENSE for the full license text.
+#    You may not use this file except in compliance with the License.
+#    Unless required by applicable law or agreed to in writing, software distributed under the
+#    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+#    either express or implied. See the License for the specific language governing permissions
+#    and limitations under the License.
+#
+#    If you need additional information or have any questions, please email: os@ota.run
+# -->
+
+name: Ota V11.22 Buzz Candidate Pressure
+
+on:
+  push:
+    branches:
+      - bobai/v11.22-buzz-candidate-pressure
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-application:
+    name: Buzz candidate application (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux
+            runner: ubuntu-latest
+          - target: macos
+            runner: macos-latest
+    steps:
+      - name: Checkout pressure controller
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Core build toolchain
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.95.0
+
+      - name: Install exact Ota revision
+        uses: ota-run/setup@493cba84bf7f7c11c9e8e996d832d93a89c62184
+        env:
+          RUSTUP_TOOLCHAIN: 1.95.0
+        with:
+          source: contract
+          contract-path: .ota-pressure/ota.yaml
+
+      - name: Checkout clean Buzz fixture
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: buzz/buzz
+          ref: 2d280376a
+          path: buzz
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Create and apply the exact candidate
+        working-directory: buzz
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ota/candidates .ota/pressure
+          ota --version --json > .ota/pressure/ota-version.json
+          git rev-parse HEAD > .ota/pressure/repository-revision.txt
+          test "$(cat .ota/pressure/repository-revision.txt)" = "2d280376a"
+          test ! -e ota.yaml
+
+          ota detect --candidate-out .ota/candidates/buzz.json --json > .ota/pressure/detect.json
+          ota detect --candidate-out .ota/candidates/buzz-repeat.json --json > .ota/pressure/detect-repeat.json
+          cmp .ota/candidates/buzz.json .ota/candidates/buzz-repeat.json
+
+          ota contract apply-candidate .ota/candidates/buzz.json --write --json > .ota/pressure/apply.json
+          ota validate --json > .ota/pressure/validate.json
+          first_contract_identity=$(shasum -a 256 ota.yaml | awk '{print $1}')
+          ota contract apply-candidate .ota/candidates/buzz.json --write --json > .ota/pressure/no-op.json
+          test "$first_contract_identity" = "$(shasum -a 256 ota.yaml | awk '{print $1}')"
+
+          node <<'NODE'
+          const fs = require('fs');
+          const candidate = JSON.parse(fs.readFileSync('.ota/candidates/buzz.json', 'utf8'));
+          const detect = JSON.parse(fs.readFileSync('.ota/pressure/detect.json', 'utf8'));
+          const applied = JSON.parse(fs.readFileSync('.ota/pressure/apply.json', 'utf8'));
+          const noOp = JSON.parse(fs.readFileSync('.ota/pressure/no-op.json', 'utf8'));
+          const validated = JSON.parse(fs.readFileSync('.ota/pressure/validate.json', 'utf8'));
+          if (!detect.ok || detect.written || candidate.kind !== 'detection' || !candidate.application_projection) {
+            throw new Error('Buzz candidate was not a complete review-only detection artifact');
+          }
+          if (!applied.ok || !applied.written || applied.no_op || !validated.ok) {
+            throw new Error('Buzz candidate did not create a valid first contract');
+          }
+          if (!noOp.ok || noOp.written || !noOp.no_op) {
+            throw new Error('Buzz candidate did not reapply as an exact semantic no-op');
+          }
+          if (candidate.changes.some((change) => change.subject.path.at(-1) === 'safe_for_agent')) {
+            throw new Error('Buzz candidate manufactured agent-safe authority');
+          }
+          fs.writeFileSync('.ota/pressure/summary.json', JSON.stringify({
+            core_revision: 'cf9d734d749cfb1259cc8249f9cc88e36bb1e00d',
+            upstream_revision: '2d280376a',
+            candidate_identity: candidate.identity,
+            resulting_contract_identity: candidate.application_projection.resulting_contract_identity,
+            application_written: applied.written,
+            no_op: noOp.no_op
+          }, null, 2) + '\n');
+          NODE
+
+          git status --porcelain --untracked-files=all -- . ':(exclude).ota' > .ota/pressure/final-status.txt
+          test "$(cat .ota/pressure/final-status.txt)" = "?? ota.yaml"
+
+      - name: Archive pressure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: buzz-v11-22-${{ matrix.target }}
+          path: buzz/.ota
+          if-no-files-found: error
+          include-hidden-files: true
