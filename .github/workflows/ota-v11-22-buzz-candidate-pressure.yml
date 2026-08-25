@@ -66,7 +66,7 @@ jobs:
       - name: Checkout clean Buzz fixture
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          repository: buzz/buzz
+          repository: block/buzz
           ref: 2d280376a
           path: buzz
           fetch-depth: 1
